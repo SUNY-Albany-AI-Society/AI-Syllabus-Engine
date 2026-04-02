@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SUNY AI Syllabus Engine - Phase 2</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f4; padding: 40px; color: #333; }
+        .wizard-container { max-width: 1000px; margin: auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-top: 8px solid #46166b; }
+        h1, h2, h3 { color: #46166b; margin-top: 0; }
+        .step-indicator { font-weight: bold; color: #eeb211; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; font-size: 0.9em; }
+        p.subtitle { color: #555; margin-bottom: 30px; font-size: 1.1em; }
+        
+        /* The Matrix Table Styling */
+        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
+        th { background-color: #46166b; color: white; text-align: left; padding: 12px; font-size: 0.9em; }
+        td { border-bottom: 1px solid #ddd; padding: 12px; vertical-align: middle; }
+        tr:hover { background-color: #f9f9fc; }
+        
+        select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 100%; font-size: 0.9em; }
+        .badge { background-color: #eeb211; color: #46166b; padding: 3px 8px; border-radius: 12px; font-size: 0.75em; font-weight: bold; margin-left: 8px; }
+        
+        /* SUNY Create Taxonomy Grid */
+        .taxonomy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; background: #f9f9fc; padding: 20px; border-radius: 6px; border: 1px solid #ddd; margin-bottom: 30px; }
+        .checkbox-label { display: flex; align-items: center; gap: 10px; font-size: 0.95em; cursor: pointer; }
+        input[type="checkbox"] { transform: scale(1.2); }
+        
+        .btn-row { display: flex; justify-content: space-between; margin-top: 20px; }
+        button { background-color: #46166b; color: white; border: none; padding: 12px 24px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s;}
+        button:hover { background-color: #351050; }
+        button.secondary { background-color: #eeb211; color: #46166b; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        function App() {
+            // Mock data representing what the Python backend extracted from the uploaded PDF
+            const assignments = [
+                { id: 1, name: "Week 3: Literature Review", type: "Research", defaultPolicy: "Mixed" },
+                { id: 2, name: "Midterm Group Project", type: "Creative", defaultPolicy: "Encouraging" },
+                { id: 3, name: "Final In-Class Exam", type: "Assessment", defaultPolicy: "Restrictive" }
+            ];
+
+            return (
+                <div className="wizard-container">
+                    <div className="step-indicator">Step 2: Assignment-Level Governance</div>
+                    <h2>Pedagogical Matrix Integration</h2>
+                    <p className="subtitle">We successfully extracted 3 assignments from your uploaded syllabus. Please define the granular AI permissions for each specific task.</p>
+                    
+                    <table>
+                        <thead>
+                            <tr>
+                                <th width="30%">Assignment Name</th>
+                                <th width="35%">AI Usage Tier</th>
+                                <th width="35%">Accountability Mandate</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {assignments.map(a => (
+                                <tr key={a.id}>
+                                    <td>
+                                        <strong>{a.name}</strong>
+                                        {a.type === "Research" && <span className="badge">AI Recommended</span>}
+                                    </td>
+                                    <td>
+                                        <select defaultValue={a.defaultPolicy}>
+                                            <option value="Restrictive">🚫 Prohibited (No AI Allowed)</option>
+                                            <option value="Mixed">⚠️ Mixed (Guided/Limited AI Use)</option>
+                                            <option value="Encouraging">✅ Encouraging (AI Integration Required)</option>
+                                        </select>
+                                    </td>
+                                    <td>
+                                        <select>
+                                            <option>No Disclosure Required</option>
+                                            <option>Mandate Prompt Logs</option>
+                                            <option>Require Formal AI Citation</option>
+                                            <option>Require Documented Fact-Check</option>
+                                        </select>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+
+                    <h3>Global Course Permissions</h3>
+                    <p style={{fontSize: "0.9em", color: "#666", marginTop: "-10px"}}>Select the overarching capabilities permitted across all "Mixed" and "Encouraging" assignments.</p>
+                    
+                    <div className="taxonomy-grid">
+                        <label className="checkbox-label"><input type="checkbox" defaultChecked /> 💡 Brainstorming & Ideation</label>
+                        <label className="checkbox-label"><input type="checkbox" defaultChecked /> 🔍 Research & Summarization</label>
+                        <label className="checkbox-label"><input type="checkbox" /> 🗒️ Outlining & Thesis Prep</label>
+                        <label className="checkbox-label"><input type="checkbox" /> 📝 Content Generation / Drafting</label>
+                        <label className="checkbox-label"><input type="checkbox" /> 📊 Data Analysis & Insights</label>
+                        <label className="checkbox-label"><input type="checkbox" /> 🗨️ Simulated Peer Review</label>
+                    </div>
+
+                    <div className="btn-row">
+                        <button className="secondary">Upload Different Syllabus</button>
+                        <button>Generate Integrated Syllabus &rarr;</button>
+                    </div>
+                </div>
+            );
+        }
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
