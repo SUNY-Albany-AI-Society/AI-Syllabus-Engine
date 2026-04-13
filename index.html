@@ -2,110 +2,223 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>SUNY AI Syllabus Engine - Phase 2</title>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Syllabus Engine | UAlbany</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f4f4; padding: 40px; color: #333; }
-        .wizard-container { max-width: 1000px; margin: auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); border-top: 8px solid #46166b; }
-        h1, h2, h3 { color: #46166b; margin-top: 0; }
-        .step-indicator { font-weight: bold; color: #eeb211; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 1px; font-size: 0.9em; }
-        p.subtitle { color: #555; margin-bottom: 30px; font-size: 1.1em; }
+        /* UAlbany Brand Colors & Global Styles */
+        :root {
+            --purple: #46166b;
+            --gold: #eeb211;
+            --light-gray: #f4f4f9;
+            --dark-gray: #333;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--light-gray);
+            color: var(--dark-gray);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            width: 800px;
+            min-height: 500px;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            border-top: 8px solid var(--purple);
+            padding: 40px;
+            text-align: center;
+        }
+        h1 { color: var(--purple); }
+        .hidden { display: none !important; }
         
-        /* The Matrix Table Styling */
-        table { width: 100%; border-collapse: collapse; margin-bottom: 30px; }
-        th { background-color: #46166b; color: white; text-align: left; padding: 12px; font-size: 0.9em; }
-        td { border-bottom: 1px solid #ddd; padding: 12px; vertical-align: middle; }
-        tr:hover { background-color: #f9f9fc; }
-        
-        select { padding: 8px; border: 1px solid #ccc; border-radius: 4px; width: 100%; font-size: 0.9em; }
-        .badge { background-color: #eeb211; color: #46166b; padding: 3px 8px; border-radius: 12px; font-size: 0.75em; font-weight: bold; margin-left: 8px; }
-        
-        /* SUNY Create Taxonomy Grid */
-        .taxonomy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; background: #f9f9fc; padding: 20px; border-radius: 6px; border: 1px solid #ddd; margin-bottom: 30px; }
-        .checkbox-label { display: flex; align-items: center; gap: 10px; font-size: 0.95em; cursor: pointer; }
-        input[type="checkbox"] { transform: scale(1.2); }
-        
-        .btn-row { display: flex; justify-content: space-between; margin-top: 20px; }
-        button { background-color: #46166b; color: white; border: none; padding: 12px 24px; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s;}
-        button:hover { background-color: #351050; }
-        button.secondary { background-color: #eeb211; color: #46166b; }
+        /* Screen 1: Upload Zone */
+        .drop-zone {
+            border: 3px dashed var(--purple);
+            border-radius: 10px;
+            padding: 60px;
+            margin: 30px 0;
+            background-color: #fcfcfc;
+            cursor: pointer;
+            transition: 0.3s;
+        }
+        .drop-zone:hover { background-color: #f0e6f7; }
+        .btn-primary {
+            background-color: var(--purple);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        .btn-primary:hover { background-color: #351052; }
+
+        /* Screen 2: Loading */
+        .loader {
+            border: 8px solid #f3f3f3;
+            border-top: 8px solid var(--gold);
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin: 40px auto;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #loading-text { font-size: 18px; font-weight: bold; color: var(--purple); }
+
+        /* Screen 3: Matrix */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: left;
+        }
+        th { background-color: var(--purple); color: white; }
+        select { padding: 8px; border-radius: 4px; }
+
+        /* Screen 4: Success */
+        .success-icon { font-size: 80px; margin-bottom: 20px; }
+        .btn-gold {
+            background-color: var(--gold);
+            color: var(--purple);
+            border: none;
+            padding: 15px 30px;
+            font-size: 18px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 10px;
+        }
     </style>
 </head>
 <body>
-    <div id="root"></div>
-    <script type="text/babel">
-        function App() {
-            // Mock data representing what the Python backend extracted from the uploaded PDF
-            const assignments = [
-                { id: 1, name: "Week 3: Literature Review", type: "Research", defaultPolicy: "Mixed" },
-                { id: 2, name: "Midterm Group Project", type: "Creative", defaultPolicy: "Encouraging" },
-                { id: 3, name: "Final In-Class Exam", type: "Assessment", defaultPolicy: "Restrictive" }
-            ];
 
-            return (
-                <div className="wizard-container">
-                    <div className="step-indicator">Step 2: Assignment-Level Governance</div>
-                    <h2>Pedagogical Matrix Integration</h2>
-                    <p className="subtitle">We successfully extracted 3 assignments from your uploaded syllabus. Please define the granular AI permissions for each specific task.</p>
-                    
-                    <table>
-                        <thead>
-                            <tr>
-                                <th width="30%">Assignment Name</th>
-                                <th width="35%">AI Usage Tier</th>
-                                <th width="35%">Accountability Mandate</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {assignments.map(a => (
-                                <tr key={a.id}>
-                                    <td>
-                                        <strong>{a.name}</strong>
-                                        {a.type === "Research" && <span className="badge">AI Recommended</span>}
-                                    </td>
-                                    <td>
-                                        <select defaultValue={a.defaultPolicy}>
-                                            <option value="Restrictive">🚫 Prohibited (No AI Allowed)</option>
-                                            <option value="Mixed">⚠️ Mixed (Guided/Limited AI Use)</option>
-                                            <option value="Encouraging">✅ Encouraging (AI Integration Required)</option>
-                                        </select>
-                                    </td>
-                                    <td>
-                                        <select>
-                                            <option>No Disclosure Required</option>
-                                            <option>Mandate Prompt Logs</option>
-                                            <option>Require Formal AI Citation</option>
-                                            <option>Require Documented Fact-Check</option>
-                                        </select>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+<div class="container">
+    
+    <div id="screen-1">
+        <h1>AI Syllabus Engine</h1>
+        <p>Upload your course syllabus to generate assignment-level AI governance policies.</p>
+        <div class="drop-zone" onclick="startProcessing()">
+            <h2 style="color: var(--purple);">📄 Drag & Drop Syllabus Here</h2>
+            <p>Supports .DOCX or .PDF (Connects to UAlbany Registrar API)</p>
+            <br>
+            <button class="btn-primary">Browse Files</button>
+        </div>
+    </div>
 
-                    <h3>Global Course Permissions</h3>
-                    <p style={{fontSize: "0.9em", color: "#666", marginTop: "-10px"}}>Select the overarching capabilities permitted across all "Mixed" and "Encouraging" assignments.</p>
-                    
-                    <div className="taxonomy-grid">
-                        <label className="checkbox-label"><input type="checkbox" defaultChecked /> 💡 Brainstorming & Ideation</label>
-                        <label className="checkbox-label"><input type="checkbox" defaultChecked /> 🔍 Research & Summarization</label>
-                        <label className="checkbox-label"><input type="checkbox" /> 🗒️ Outlining & Thesis Prep</label>
-                        <label className="checkbox-label"><input type="checkbox" /> 📝 Content Generation / Drafting</label>
-                        <label className="checkbox-label"><input type="checkbox" /> 📊 Data Analysis & Insights</label>
-                        <label className="checkbox-label"><input type="checkbox" /> 🗨️ Simulated Peer Review</label>
-                    </div>
+    <div id="screen-2" class="hidden">
+        <h1>Processing Syllabus...</h1>
+        <div class="loader"></div>
+        <p id="loading-text">Connecting to UAlbany Registrar Database...</p>
+    </div>
 
-                    <div className="btn-row">
-                        <button className="secondary">Upload Different Syllabus</button>
-                        <button>Generate Integrated Syllabus &rarr;</button>
-                    </div>
-                </div>
-            );
-        }
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<App />);
-    </script>
+    <div id="screen-3" class="hidden">
+        <h4 style="color: var(--gold); margin:0;">STEP 2: ASSIGNMENT-LEVEL GOVERNANCE</h4>
+        <h1>Pedagogical Matrix Integration</h1>
+        <p>3 assignments successfully extracted. Please configure your AI usage tiers below.</p>
+        
+        <table>
+            <tr>
+                <th>Assignment Name</th>
+                <th>AI Usage Tier</th>
+                <th>Accountability Mandate</th>
+            </tr>
+            <tr>
+                <td>Week 3: Literature Review 🏆 <em>AI Rec</em></td>
+                <td>
+                    <select>
+                        <option>⚠️ Mixed Use</option>
+                        <option>✅ Encouraging</option>
+                        <option>🚫 Prohibited</option>
+                    </select>
+                </td>
+                <td>Mandate Prompt Logs</td>
+            </tr>
+            <tr>
+                <td>Midterm Group Project</td>
+                <td>
+                    <select>
+                        <option>✅ Encouraging</option>
+                        <option>⚠️ Mixed Use</option>
+                        <option>🚫 Prohibited</option>
+                    </select>
+                </td>
+                <td>Acknowledge AI Usage in Footer</td>
+            </tr>
+            <tr>
+                <td>Final In-Class Exam</td>
+                <td>
+                    <select>
+                        <option>🚫 Prohibited</option>
+                        <option>⚠️ Mixed Use</option>
+                        <option>✅ Encouraging</option>
+                    </select>
+                </td>
+                <td>N/A (In-Class)</td>
+            </tr>
+        </table>
+        
+        <br><br>
+        <button class="btn-primary" onclick="generateSyllabus()">Generate Integrated Syllabus &rarr;</button>
+    </div>
+
+    <div id="screen-4" class="hidden">
+        <div class="success-icon">🎉</div>
+        <h1>Syllabus Successfully Generated!</h1>
+        <p>Your pedagogical matrix and SUNY Create AI taxonomy have been natively integrated into the document.</p>
+        <br>
+        <button class="btn-gold" onclick="resetApp()">📥 Download Word Document (.docx)</button>
+        <button class="btn-primary" onclick="resetApp()">📥 Download PDF (.pdf)</button>
+        <br><br>
+        <a href="#" style="color: var(--purple);" onclick="resetApp()">Start over with a different syllabus</a>
+    </div>
+
+</div>
+
+<script>
+    // JavaScript to handle the "Wizard of Oz" transitions
+    function showScreen(screenNumber) {
+        document.getElementById('screen-1').classList.add('hidden');
+        document.getElementById('screen-2').classList.add('hidden');
+        document.getElementById('screen-3').classList.add('hidden');
+        document.getElementById('screen-4').classList.add('hidden');
+        
+        document.getElementById('screen-' + screenNumber).classList.remove('hidden');
+    }
+
+    function startProcessing() {
+        // Go to Screen 2 (Loading)
+        showScreen(2);
+        
+        // Simulate backend parsing with changing text
+        setTimeout(() => { document.getElementById('loading-text').innerText = "Extracting Course Schedule..."; }, 1500);
+        setTimeout(() => { document.getElementById('loading-text').innerText = "Identifying Assignments using Local LLM..."; }, 3000);
+        setTimeout(() => { document.getElementById('loading-text').innerText = "Applying SUNY Create Taxonomy..."; }, 4500);
+        
+        // Move to Screen 3 (Matrix) after 6 seconds
+        setTimeout(() => { showScreen(3); }, 6000);
+    }
+
+    function generateSyllabus() {
+        // Simple transition to final screen
+        showScreen(4);
+    }
+
+    function resetApp() {
+        // Reset text and go back to start
+        document.getElementById('loading-text').innerText = "Connecting to UAlbany Registrar Database...";
+        showScreen(1);
+    }
+</script>
+
 </body>
 </html>
