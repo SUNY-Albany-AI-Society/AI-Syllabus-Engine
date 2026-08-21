@@ -78,7 +78,11 @@ const responseSchema: Schema = {
         title: { type: SchemaType.STRING, description: 'Full course title from the syllabus' },
         instructor: { type: SchemaType.STRING, description: 'Instructor name if present, otherwise empty string' },
         term: { type: SchemaType.STRING, description: 'Term/semester if present, otherwise empty string' },
-        department: { type: SchemaType.STRING },
+        department: {
+          type: SchemaType.STRING,
+          description:
+            'The department, school, or college that offers this course, taken from the syllabus itself. Do not guess from the course code alone.',
+        },
       },
       required: ['code', 'title', 'instructor', 'term', 'department'],
     },
@@ -165,11 +169,11 @@ function buildFallback(course: string, department: string, reason: string) {
     extracted_preview: '',
     data: {
       course: {
-        code: course,
+        code: course || 'Demo Course',
         title: 'Demonstration Course',
         instructor: '',
         term: '',
-        department,
+        department: department || '',
       },
       course_summary:
         'This is placeholder demonstration content. The live model call did not succeed, so the structure below is illustrative rather than derived from an uploaded syllabus.',
@@ -221,9 +225,9 @@ function buildFallback(course: string, department: string, reason: string) {
 
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
-  const course = (formData.get('course') as string) || 'Unknown Course';
-  const department = (formData.get('department') as string) || 'Unspecified Department';
-  const wishList = (formData.get('wishList') as string) || '';
+  const course = ((formData.get('course') as string) || '').trim();
+  const department = ((formData.get('department') as string) || '').trim();
+  const wishList = ((formData.get('wishList') as string) || '').trim();
   const file = formData.get('file') as File | null;
 
   if (!process.env.GEMINI_API_KEY) {
@@ -248,22 +252,25 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const hints: string[] = [];
+  if (course) hints.push(`Course code hint: ${course}`);
+  if (department) hints.push(`Department hint: ${department}`);
+  if (wishList) hints.push(`Faculty AI wish-list: ${wishList}`);
+
   const prompt = `You are an AI governance analyst for the University at Albany (SUNY), supporting the AI & Society College.
 
 Your job: read the attached course syllabus and produce an assignment-level AI governance matrix for it.
 
-CONTEXT PROVIDED BY THE FACULTY MEMBER
-Course code: ${course}
-Department: ${department}
-Faculty AI wish-list: ${wishList || '(none provided — apply sound pedagogical defaults)'}
-
+${hints.length ? `FACULTY-PROVIDED HINTS\n${hints.join('\n')}\n` : 'The faculty member provided no hints. Take everything from the syllabus.\n'}
 RULES
-1. Extract the ACTUAL modules, weeks, and assignments from the syllabus. Do not invent generic ones. Use the syllabus's own labels and wording for titles.
-2. Assign every module and every task a tier. ${TIER_RULE}.
-3. Base tier choices on the learning objective. Assessments of individual mastery lean restrictive. Ideation, formatting, and technical scaffolding lean permissive. Honor the faculty wish-list wherever it does not conflict with FERPA or academic integrity.
-4. A module's tier should be the most restrictive tier among its tasks unless the syllabus clearly indicates otherwise.
-5. Write all prose for a student audience: direct, concrete, no bureaucratic filler.
-6. Never include student names, PII, or any confidential content from the document in your output.
+1. SOURCE OF TRUTH: the syllabus document itself. Take the course code, course title, instructor, term, and department/school/college from the syllabus wherever it states them. The hints above are fallbacks ONLY for fields the syllabus does not state. If a hint contradicts the syllabus, the syllabus wins.
+2. For 'department', report the academic unit that actually offers the course as named in the syllabus (school, college, or department). Never substitute the faculty member's own unit.
+3. Extract the ACTUAL modules, weeks, and assignments from the syllabus. Do not invent generic ones. Use the syllabus's own labels and wording for titles.
+4. Assign every module and every task a tier. ${TIER_RULE}.
+5. Base tier choices on the learning objective. Assessments of individual mastery lean restrictive. Ideation, formatting, and technical scaffolding lean permissive. Honor the faculty wish-list wherever it does not conflict with FERPA or academic integrity.
+6. A module's tier should be the most restrictive tier among its tasks unless the syllabus clearly indicates otherwise.
+7. Write all prose for a student audience: direct, concrete, no bureaucratic filler.
+8. Never include student names, PII, or any confidential content from the document in your output.
 
 ${extracted.text ? `SYLLABUS TEXT:\n"""\n${extracted.text.slice(0, 120000)}\n"""` : 'The syllabus is attached as a PDF.'}`;
 

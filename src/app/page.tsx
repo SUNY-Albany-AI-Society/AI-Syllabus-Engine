@@ -9,6 +9,14 @@ const TIERS = [
   'Tier 4: Permitted with Mandatory Disclosure',
 ];
 
+// Shorter labels so the dropdowns don't truncate. Values stay canonical.
+const TIER_LABELS: Record<string, string> = {
+  'Tier 1: Strictly Prohibited': 'Tier 1 — Prohibited',
+  'Tier 2: Brainstorming Permitted': 'Tier 2 — Brainstorming',
+  'Tier 3: Full AI Permitted': 'Tier 3 — Full AI',
+  'Tier 4: Permitted with Mandatory Disclosure': 'Tier 4 — Disclosure',
+};
+
 type Task = {
   title: string;
   recommended_tier: string;
@@ -57,8 +65,8 @@ export default function SyllabusWizard() {
   const [step, setStep] = useState(1);
   const [wishList, setWishList] = useState('');
   const [file, setFile] = useState<File | null>(null);
-  const [course, setCourse] = useState('CIST 601');
-  const [department, setDepartment] = useState('Information Science');
+  const [course, setCourse] = useState('');
+  const [department, setDepartment] = useState('');
   const [loading, setLoading] = useState(false);
 
   const [payload, setPayload] = useState<Payload | null>(null);
@@ -191,6 +199,16 @@ export default function SyllabusWizard() {
     0
   );
 
+  const docName = () => {
+    const c = payload?.course;
+    const code = c?.code || course || 'Course';
+    const title = c?.title ? ` - ${c.title}` : '';
+    return `Artificial Intelligence Policy Addendum - ${code}${title}`
+      .replace(/[\\/:*?"<>|]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+
   const buildAddendumHtml = () => {
     if (!payload) return '';
     const c = payload.course;
@@ -282,18 +300,61 @@ export default function SyllabusWizard() {
   };
 
   const downloadDoc = () => {
+    const name = docName();
     const html = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-      <head><meta charset='utf-8'><title>AI Policy Addendum</title></head>
-      <body>${buildAddendumHtml()}</body></html>`;
+<head>
+<meta charset='utf-8'>
+<title>${name}</title>
+<!--[if gte mso 9]><xml>
+<w:WordDocument><w:View>Print</w:View><w:Zoom>100</w:Zoom></w:WordDocument>
+</xml><![endif]-->
+<style>
+@page Section1 {
+  size: 8.5in 11.0in;
+  margin: 1.0in 1.0in 1.0in 1.0in;
+  mso-header-margin: .5in;
+  mso-footer-margin: .5in;
+  mso-footer: f1;
+  mso-paper-source: 0;
+}
+div.Section1 { page: Section1; }
+p.MsoFooter, li.MsoFooter, div.MsoFooter {
+  margin: 0in;
+  font-size: 9.0pt;
+  font-family: Arial, sans-serif;
+  color: #777777;
+}
+</style>
+</head>
+<body>
+<div class="Section1">${buildAddendumHtml()}</div>
+<div style='mso-element:footer' id="f1">
+  <p class="MsoFooter" style="text-align:center;">
+    Page <span style='mso-field-code:PAGE'></span> of <span style='mso-field-code:NUMPAGES'></span>
+  </p>
+</div>
+</body>
+</html>`;
     const blob = new Blob(['\ufeff', html], { type: 'application/msword' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${course.replace(/\s+/g, '_')}_AI_Addendum.doc`;
+    link.download = `${name}.doc`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+  };
+
+  const printAddendum = () => {
+    const previous = document.title;
+    document.title = docName();
+    const restore = () => {
+      document.title = previous;
+    };
+    window.addEventListener('afterprint', restore, { once: true });
+    window.print();
+    setTimeout(restore, 3000);
   };
 
   const renderHitl = () => {
@@ -348,6 +409,9 @@ export default function SyllabusWizard() {
               type="email"
               value={emailInput}
               onChange={(e) => setEmailInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !loading) handleSimulatedLogin();
+              }}
               placeholder="netid@albany.edu"
               className="w-full border border-slate-300 rounded p-3 text-sm text-slate-900 bg-white focus:outline-none focus:ring-2"
             />
@@ -383,11 +447,11 @@ export default function SyllabusWizard() {
 
       {renderHitl()}
 
-      <header className="text-white p-6 shadow-md border-b-4 no-print" style={{ backgroundColor: PURPLE, borderColor: GOLD }}>
+      <header className="text-white p-6 shadow-md border-b-4" style={{ backgroundColor: PURPLE, borderColor: GOLD }}>
         <div className="max-w-5xl mx-auto">
           <h1 className="text-2xl font-bold tracking-wide">AI Syllabus Engine</h1>
           <p className="text-xs font-medium mt-1" style={{ color: GOLD }}>
-            Authenticated: {session.user.email} (Dept. of {department})
+            Signed in: {session.user.email}
           </p>
         </div>
       </header>
@@ -395,24 +459,30 @@ export default function SyllabusWizard() {
       <main className="max-w-4xl mx-auto p-6 mt-8">
         {step === 1 && (
           <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200">
-            <h2 className="text-xl font-bold mb-4" style={{ color: PURPLE }}>Step 1: Pedagogical Context</h2>
+            <h2 className="text-xl font-bold mb-1" style={{ color: PURPLE }}>Step 1: Pedagogical Context</h2>
+            <p className="text-xs text-slate-500 mb-5">
+              Upload a syllabus. Course details are read from the document — the fields below are optional and only used
+              if the syllabus doesn&apos;t state them.
+            </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Course Code</label>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Course Code (optional)</label>
                 <input
                   type="text"
                   value={course}
                   onChange={(e) => setCourse(e.target.value)}
+                  placeholder="Leave blank to read from syllabus"
                   className="w-full border rounded p-2 text-sm text-slate-900 bg-white"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Department</label>
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Department (optional)</label>
                 <input
                   type="text"
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
+                  placeholder="Leave blank to read from syllabus"
                   className="w-full border rounded p-2 text-sm text-slate-900 bg-white"
                 />
               </div>
@@ -454,6 +524,11 @@ export default function SyllabusWizard() {
               {loading ? 'Reading syllabus and building the matrix...' : 'Run Smart Wizard →'}
             </button>
             {!file && <p className="text-xs text-slate-500 text-center mt-2">Select a syllabus file to continue.</p>}
+            {loading && (
+              <p className="text-xs text-slate-500 text-center mt-2">
+                Full-semester syllabi typically take about a minute.
+              </p>
+            )}
           </div>
         )}
 
@@ -516,35 +591,36 @@ export default function SyllabusWizard() {
               <div key={mi} className="mb-6 border border-slate-200 rounded overflow-hidden">
                 <div className="p-4 border-b border-slate-200" style={{ backgroundColor: '#f7f4fa' }}>
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-                    <div>
+                    <div className="flex-1">
                       <div className="font-bold text-sm" style={{ color: PURPLE }}>
                         {m.label}: {m.title}
                       </div>
                       <div className="text-xs text-slate-500 mt-1">{m.rationale}</div>
                     </div>
-                    <div className="md:w-72">
+                    <div className="md:w-64 shrink-0">
                       <label className="block text-[10px] font-bold uppercase text-slate-500 mb-1">Module-wide tier</label>
                       <select
                         value={m.current_tier}
                         onChange={(e) => initiateModuleChange(mi, e.target.value)}
+                        title={m.current_tier}
                         className={`w-full p-2 border rounded text-xs font-semibold cursor-pointer ${
                           m.is_overridden ? 'border-amber-400 bg-amber-50 text-amber-900' : 'border-green-300 bg-green-50 text-green-900'
                         }`}
                       >
                         {TIERS.map((t) => (
-                          <option key={t} value={t}>{t}</option>
+                          <option key={t} value={t}>{TIER_LABELS[t]}</option>
                         ))}
                       </select>
                     </div>
                   </div>
                 </div>
 
-                <table className="w-full text-left text-sm">
+                <table className="w-full text-left text-sm table-fixed">
                   <thead className="bg-slate-100 text-slate-600">
                     <tr>
-                      <th className="p-3 w-1/3 text-xs uppercase">Task</th>
-                      <th className="p-3 w-1/3 text-xs uppercase">Authorized Tier</th>
-                      <th className="p-3 w-1/3 text-xs uppercase">Permitted Use</th>
+                      <th className="p-3 w-[34%] text-xs uppercase">Task</th>
+                      <th className="p-3 w-[26%] text-xs uppercase">Authorized Tier</th>
+                      <th className="p-3 w-[40%] text-xs uppercase">Permitted Use</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -558,12 +634,13 @@ export default function SyllabusWizard() {
                           <select
                             value={t.current_tier}
                             onChange={(e) => initiateTaskChange(mi, ti, e.target.value)}
+                            title={t.current_tier}
                             className={`w-full p-2 border rounded text-xs font-semibold cursor-pointer ${
                               t.is_overridden ? 'border-amber-400 bg-amber-50 text-amber-900' : 'border-green-300 bg-green-50 text-green-900'
                             }`}
                           >
                             {TIERS.map((tier) => (
-                              <option key={tier} value={tier}>{tier}</option>
+                              <option key={tier} value={tier}>{TIER_LABELS[tier]}</option>
                             ))}
                           </select>
                           <div className="text-[10px] mt-1">
@@ -602,7 +679,7 @@ export default function SyllabusWizard() {
 
         {step === 3 && payload && (
           <div>
-            <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 mb-6 no-print">
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-slate-200 mb-6">
               <h2 className="text-xl font-bold mb-2" style={{ color: PURPLE }}>Step 3: Review and Export</h2>
               <p className="text-sm text-slate-600 mb-4">
                 This is the document faculty will attach to their syllabus or paste into Brightspace.
@@ -615,7 +692,7 @@ export default function SyllabusWizard() {
                 <button onClick={downloadDoc} className="text-white font-bold py-2 px-5 rounded shadow" style={{ backgroundColor: PURPLE }}>
                   Download Word (.doc)
                 </button>
-                <button onClick={() => window.print()} className="font-bold py-2 px-5 rounded shadow" style={{ backgroundColor: GOLD, color: PURPLE }}>
+                <button onClick={printAddendum} className="font-bold py-2 px-5 rounded shadow" style={{ backgroundColor: GOLD, color: PURPLE }}>
                   Print / Save as PDF
                 </button>
               </div>
