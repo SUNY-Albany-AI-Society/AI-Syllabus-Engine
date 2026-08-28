@@ -323,13 +323,13 @@ export default function SyllabusWizard() {
         <td colspan="3" style="padding:10px 8px 12px 8px;border:1px solid #ddd;border-top:none;background-color:#fbfaf7;">
           ${
             promptItems
-              ? `<div style="font-size:11px;font-weight:bold;color:#1a6b3c;margin-bottom:4px;">Prompts you may use</div>
+              ? `<div style="font-size:11px;font-weight:bold;color:#1a6b3c;margin-bottom:4px;">Example of prompts you may use</div>
                  <ul style="margin:0 0 10px 18px;padding:0;font-size:11px;color:#333;">${promptItems}</ul>`
               : ''
           }
           ${
             riskItems
-              ? `<div style="font-size:11px;font-weight:bold;color:#8a2222;margin-bottom:4px;">Uses that would put you at risk</div>
+              ? `<div style="font-size:11px;font-weight:bold;color:#8a2222;margin-bottom:4px;">Example of uses that would put you at risk</div>
                  <ul style="margin:0 0 0 18px;padding:0;font-size:11px;color:#333;">${riskItems}</ul>`
               : ''
           }
@@ -912,7 +912,7 @@ p.MsoFooter, li.MsoFooter, div.MsoFooter {
                                     {prompts.length > 0 && (
                                       <>
                                         <div className="text-[10px] font-bold uppercase text-green-800 mb-1">
-                                          Prompts students may use
+                                          Example of prompts you may use
                                         </div>
                                         <ul className="list-disc ml-4 mb-3 space-y-1">
                                           {prompts.map((p, pi) => (
@@ -927,7 +927,7 @@ p.MsoFooter, li.MsoFooter, div.MsoFooter {
                                     {risks.length > 0 && (
                                       <>
                                         <div className="text-[10px] font-bold uppercase text-red-800 mb-1">
-                                          Uses that risk a violation
+                                          Example of uses that would put you at risk
                                         </div>
                                         <ul className="list-disc ml-4 space-y-1">
                                           {risks.map((r, ri) => (
