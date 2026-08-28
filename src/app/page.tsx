@@ -17,6 +17,76 @@ const TIER_LABELS: Record<string, string> = {
   'Tier 4: Permitted with Mandatory Disclosure': 'Tier 4 — Disclosure',
 };
 
+// Optional pedagogical goals. `directive` is what actually reaches the model.
+const GOALS: { id: string; label: string; hint: string; directive: string }[] = [
+  {
+    id: 'teamwork',
+    label: 'Encourage teamwork',
+    hint: 'Collaboration is part of the objective',
+    directive:
+      'Encourage collaboration and teamwork. Where an assignment is group work, permit AI use that supports coordination, shared drafting, and division of labour, and make clear that each student remains individually accountable for the group product.',
+  },
+  {
+    id: 'integrity',
+    label: 'Guard academic integrity',
+    hint: 'Protect assessment of individual mastery',
+    directive:
+      'Guard academic integrity ahead of convenience. Where a task assesses individual mastery, lean restrictive, and state plainly which uses would constitute an integrity violation in this course.',
+  },
+  {
+    id: 'coding',
+    label: 'Coding guardrails',
+    hint: 'Rules for generating and debugging code',
+    directive:
+      'Set explicit guardrails for coding work. Distinguish between using AI to explain an error, to review or refactor code the student wrote, and to generate a submitted solution outright. Require that students be able to explain any code they submit line by line.',
+  },
+  {
+    id: 'writing',
+    label: 'Protect original writing',
+    hint: 'Students keep their own voice',
+    directive:
+      'Protect original writing and student voice. Permit AI for outlining, feedback, and revision prompts, but require that submitted prose be the student\'s own composition unless a task states otherwise.',
+  },
+  {
+    id: 'critical-thinking',
+    label: 'Preserve critical thinking',
+    hint: 'Analysis stays with the student',
+    directive:
+      'Preserve independent analysis. Permit AI to surface counterarguments or check reasoning, but require that analytical claims and their justification originate with the student.',
+  },
+  {
+    id: 'ai-literacy',
+    label: 'Build AI literacy',
+    hint: 'Students learn to use AI well',
+    directive:
+      'Treat AI literacy as a learning outcome in its own right. Where appropriate, permit or encourage AI use paired with a requirement that students critique the output, identify its errors, and document how they verified it.',
+  },
+  {
+    id: 'research-integrity',
+    label: 'Safeguard research and citation',
+    hint: 'No fabricated or unverified sources',
+    directive:
+      'Safeguard research and citation integrity. Require students to verify every source against the original and prohibit citing anything an AI tool produced that they have not independently confirmed exists.',
+  },
+  {
+    id: 'privacy',
+    label: 'Protect data privacy',
+    hint: 'No confidential or personal data in prompts',
+    directive:
+      'Protect data privacy. Prohibit entering personally identifiable information, human-subjects data, unpublished research, or institutionally confidential material into any public AI tool.',
+  },
+  {
+    id: 'accessibility',
+    label: 'Support equitable access',
+    hint: 'No task requires a paid tool',
+    directive:
+      'Support equitable access. Ensure no task requires a paid AI subscription, and describe an alternative pathway for students without access to paid tools.',
+  },
+];
+
+type PromptExample = { prompt: string; purpose: string };
+type AtRiskUse = { pattern: string; why_at_risk: string };
+
 type Task = {
   title: string;
   recommended_tier: string;
@@ -24,6 +94,8 @@ type Task = {
   is_overridden: boolean;
   rationale: string;
   acceptable_use: string;
+  suggested_prompts?: PromptExample[];
+  at_risk_uses?: AtRiskUse[];
 };
 
 type Module = {
@@ -48,6 +120,8 @@ type Payload = {
   course: CourseMeta;
   course_summary: string;
   policy_statement: string;
+  goals_statement?: string;
+  integrity_guidance?: string;
   disclosure_statement: string;
   equity_statement: string;
   tier_definitions: { tier: string; definition: string }[];
@@ -56,6 +130,7 @@ type Payload = {
 
 const PURPLE = '#46166B';
 const GOLD = '#EEB211';
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX'];
 
 export default function SyllabusWizard() {
   const [session, setSession] = useState<{ user: { name: string; email: string } } | null>(null);
@@ -64,6 +139,7 @@ export default function SyllabusWizard() {
 
   const [step, setStep] = useState(1);
   const [wishList, setWishList] = useState('');
+  const [selectedGoals, setSelectedGoals] = useState<string[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [course, setCourse] = useState('');
   const [department, setDepartment] = useState('');
@@ -71,11 +147,13 @@ export default function SyllabusWizard() {
 
   const [payload, setPayload] = useState<Payload | null>(null);
   const [modules, setModules] = useState<Module[]>([]);
+  const [appliedGoals, setAppliedGoals] = useState<string[]>([]);
   const [source, setSource] = useState<'live' | 'fallback' | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [extractedNote, setExtractedNote] = useState('');
   const [extractedPreview, setExtractedPreview] = useState('');
   const [showSource, setShowSource] = useState(false);
+  const [openPrompts, setOpenPrompts] = useState<Record<string, boolean>>({});
 
   const [hitl, setHitl] = useState<{
     open: boolean;
@@ -100,13 +178,23 @@ export default function SyllabusWizard() {
     }, 600);
   };
 
+  const toggleGoal = (id: string) => {
+    setSelectedGoals((prev) => (prev.includes(id) ? prev.filter((g) => g !== id) : [...prev, id]));
+  };
+
   const handleAnalyze = async () => {
     setLoading(true);
+    const chosen = GOALS.filter((g) => selectedGoals.includes(g.id));
+
     const fd = new FormData();
     fd.append('course', course);
     fd.append('department', department);
     if (file) fd.append('file', file);
     if (wishList) fd.append('wishList', wishList);
+    if (chosen.length) {
+      fd.append('goals', chosen.map((g) => g.label).join('; '));
+      fd.append('goalDirectives', chosen.map((g) => `- ${g.label}: ${g.directive}`).join('\n'));
+    }
 
     try {
       const res = await fetch('/api/generate', { method: 'POST', body: fd });
@@ -116,6 +204,8 @@ export default function SyllabusWizard() {
       setSourceError(json.error ?? null);
       setExtractedNote(json.extracted_note ?? '');
       setExtractedPreview(json.extracted_preview ?? '');
+      setAppliedGoals(chosen.map((g) => g.label));
+      setOpenPrompts({});
 
       const data: Payload = json.data;
       setPayload(data);
@@ -209,6 +299,44 @@ export default function SyllabusWizard() {
       .trim();
   };
 
+  const promptBlockHtml = (t: Task) => {
+    const prompts = t.suggested_prompts || [];
+    const risks = t.at_risk_uses || [];
+    if (!prompts.length && !risks.length) return '';
+
+    const promptItems = prompts
+      .map(
+        (p) =>
+          `<li style="margin-bottom:3px;">&ldquo;${p.prompt}&rdquo; <span style="color:#666;">&mdash; ${p.purpose}</span></li>`
+      )
+      .join('');
+
+    const riskItems = risks
+      .map(
+        (r) =>
+          `<li style="margin-bottom:3px;">${r.pattern} <span style="color:#666;">&mdash; ${r.why_at_risk}</span></li>`
+      )
+      .join('');
+
+    return `
+      <tr>
+        <td colspan="3" style="padding:10px 8px 12px 8px;border:1px solid #ddd;border-top:none;background-color:#fbfaf7;">
+          ${
+            promptItems
+              ? `<div style="font-size:11px;font-weight:bold;color:#1a6b3c;margin-bottom:4px;">Prompts you may use</div>
+                 <ul style="margin:0 0 10px 18px;padding:0;font-size:11px;color:#333;">${promptItems}</ul>`
+              : ''
+          }
+          ${
+            riskItems
+              ? `<div style="font-size:11px;font-weight:bold;color:#8a2222;margin-bottom:4px;">Uses that would put you at risk</div>
+                 <ul style="margin:0 0 0 18px;padding:0;font-size:11px;color:#333;">${riskItems}</ul>`
+              : ''
+          }
+        </td>
+      </tr>`;
+  };
+
   const buildAddendumHtml = () => {
     if (!payload) return '';
     const c = payload.course;
@@ -241,7 +369,7 @@ export default function SyllabusWizard() {
                   t.is_overridden ? '<br/><span style="font-size:10px;color:#8a6100;">Faculty override</span>' : ''
                 }</td>
                 <td style="padding:8px;border:1px solid #ddd;">${t.acceptable_use}</td>
-              </tr>`
+              </tr>${promptBlockHtml(t)}`
               )
               .join('')}
           </tbody>
@@ -260,6 +388,62 @@ export default function SyllabusWizard() {
       )
       .join('');
 
+    const sections: { title: string; body: string }[] = [];
+
+    sections.push({
+      title: 'Institutional AI Policy',
+      body: `<p style="font-size:13px;">${payload.policy_statement}</p>`,
+    });
+
+    if (appliedGoals.length || payload.goals_statement) {
+      const goalList = appliedGoals.length
+        ? `<ul style="font-size:13px;margin:0 0 12px 20px;padding:0;">${appliedGoals
+            .map((g) => `<li style="margin-bottom:3px;">${g}</li>`)
+            .join('')}</ul>`
+        : '';
+      sections.push({
+        title: appliedGoals.length ? 'Course Priorities Reflected in This Policy' : 'How These Authorizations Were Set',
+        body: `${goalList}<p style="font-size:13px;">${payload.goals_statement || ''}</p>`,
+      });
+    }
+
+    sections.push({
+      title: 'Usage Tiers in This Course',
+      body: `<table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:20px;"><tbody>${tierRows}</tbody></table>`,
+    });
+
+    sections.push({
+      title: 'Module and Task Authorizations',
+      body: moduleBlocks,
+    });
+
+    if (payload.integrity_guidance) {
+      sections.push({
+        title: 'Staying Within Policy',
+        body: `<p style="font-size:13px;">${payload.integrity_guidance}</p>`,
+      });
+    }
+
+    sections.push({
+      title: 'Disclosure and Citation',
+      body: `<p style="font-size:13px;">${payload.disclosure_statement}</p>`,
+    });
+
+    sections.push({
+      title: 'Equitable Access',
+      body: `<p style="font-size:13px;">${payload.equity_statement}</p>`,
+    });
+
+    const sectionHtml = sections
+      .map(
+        (s, i) => `
+        <h2 style="font-size:15px;color:${PURPLE};border-bottom:1px solid #ddd;padding-bottom:4px;">
+          ${ROMAN[i]}. ${s.title}
+        </h2>
+        ${s.body}`
+      )
+      .join('');
+
     return `
       <div style="font-family:Georgia,'Times New Roman',serif;color:#222;line-height:1.55;">
         <div style="text-align:center;border-bottom:3px solid ${GOLD};padding-bottom:14px;margin-bottom:22px;">
@@ -275,22 +459,7 @@ export default function SyllabusWizard() {
 
         <p style="font-size:13px;font-style:italic;color:#444;margin-bottom:20px;">${payload.course_summary}</p>
 
-        <h2 style="font-size:15px;color:${PURPLE};border-bottom:1px solid #ddd;padding-bottom:4px;">I. Institutional AI Policy</h2>
-        <p style="font-size:13px;">${payload.policy_statement}</p>
-
-        <h2 style="font-size:15px;color:${PURPLE};border-bottom:1px solid #ddd;padding-bottom:4px;">II. Usage Tiers in This Course</h2>
-        <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:20px;">
-          <tbody>${tierRows}</tbody>
-        </table>
-
-        <h2 style="font-size:15px;color:${PURPLE};border-bottom:1px solid #ddd;padding-bottom:4px;">III. Module and Task Authorizations</h2>
-        ${moduleBlocks}
-
-        <h2 style="font-size:15px;color:${PURPLE};border-bottom:1px solid #ddd;padding-bottom:4px;">IV. Disclosure and Citation</h2>
-        <p style="font-size:13px;">${payload.disclosure_statement}</p>
-
-        <h2 style="font-size:15px;color:${PURPLE};border-bottom:1px solid #ddd;padding-bottom:4px;">V. Equitable Access</h2>
-        <p style="font-size:13px;">${payload.equity_statement}</p>
+        ${sectionHtml}
 
         <p style="margin-top:32px;font-size:11px;color:#777;border-top:1px solid #ddd;padding-top:10px;">
           Generated by the UAlbany AI Syllabus Engine on ${new Date().toLocaleDateString()}.
@@ -488,30 +657,77 @@ p.MsoFooter, li.MsoFooter, div.MsoFooter {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              <div className="border-2 border-dashed border-slate-300 rounded p-6 text-center bg-slate-50 hover:bg-slate-100 transition-colors">
-                <label className="block text-sm font-bold text-slate-600 mb-2 cursor-pointer">
-                  Upload Syllabus
-                  <input
-                    type="file"
-                    accept=".docx,.doc,.pdf,.txt,.rtf,.md,.csv"
-                    onChange={(e) => setFile(e.target.files?.[0] || null)}
-                    className="hidden"
-                  />
-                </label>
-                <p className="text-xs text-slate-500">{file ? file.name : 'Click to select a file'}</p>
-                <p className="text-[10px] text-slate-400 mt-2">.docx, .pdf, .txt, .rtf, .md accepted (.docx or .pdf recommended)</p>
-              </div>
-
-              <div className="border border-slate-200 rounded p-4 bg-white">
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">AI Wish-List (Optional)</label>
-                <textarea
-                  rows={3}
-                  value={wishList}
-                  onChange={(e) => setWishList(e.target.value)}
-                  placeholder="e.g., 'I want them to use ChatGPT to outline essays, but not write them...'"
-                  className="w-full border rounded p-2 text-sm text-slate-900 bg-white resize-none"
+            <div className="border-2 border-dashed border-slate-300 rounded p-6 text-center bg-slate-50 hover:bg-slate-100 transition-colors mb-6">
+              <label className="block text-sm font-bold text-slate-600 mb-2 cursor-pointer">
+                Upload Syllabus
+                <input
+                  type="file"
+                  accept=".docx,.doc,.pdf,.txt,.rtf,.md,.csv"
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
+                  className="hidden"
                 />
+              </label>
+              <p className="text-xs text-slate-500">{file ? file.name : 'Click to select a file'}</p>
+              <p className="text-[10px] text-slate-400 mt-2">.docx, .pdf, .txt, .rtf, .md accepted (.docx or .pdf recommended)</p>
+            </div>
+
+            <div className="border border-slate-200 rounded p-4 bg-white mb-6">
+              <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">AI Wish-List (Optional)</label>
+              <textarea
+                rows={3}
+                value={wishList}
+                onChange={(e) => setWishList(e.target.value)}
+                placeholder="e.g., 'I want them to use AI to outline essays, but not write them...'"
+                className="w-full border rounded p-2 text-sm text-slate-900 bg-white resize-none"
+              />
+
+              <div className="mt-5 pt-4 border-t border-slate-200">
+                <div className="text-xs font-semibold text-slate-700 uppercase mb-1">Policy Goals (Optional)</div>
+                <p className="text-xs text-slate-500 mb-3">
+                  Select what this policy should actively encourage or restrict. Each goal shapes the tier assigned to every
+                  assignment, the reasoning shown to students, and the example prompts in the final document.
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {GOALS.map((g) => {
+                    const on = selectedGoals.includes(g.id);
+                    return (
+                      <button
+                        key={g.id}
+                        type="button"
+                        onClick={() => toggleGoal(g.id)}
+                        aria-pressed={on}
+                        className={`text-left p-3 rounded border transition-colors ${
+                          on ? 'border-2 shadow-sm' : 'border-slate-200 bg-white hover:bg-slate-50'
+                        }`}
+                        style={on ? { borderColor: PURPLE, backgroundColor: '#f7f4fa' } : undefined}
+                      >
+                        <div className="flex items-start gap-2">
+                          <span
+                            className="mt-[2px] w-4 h-4 rounded-sm border flex items-center justify-center shrink-0 text-[10px] font-bold text-white"
+                            style={{
+                              backgroundColor: on ? PURPLE : 'transparent',
+                              borderColor: on ? PURPLE : '#cbd5e1',
+                            }}
+                          >
+                            {on ? '✓' : ''}
+                          </span>
+                          <span>
+                            <span className="block text-xs font-bold text-slate-800 leading-tight">{g.label}</span>
+                            <span className="block text-[10px] text-slate-500 mt-1 leading-snug">{g.hint}</span>
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedGoals.length > 0 && (
+                  <p className="text-[11px] text-slate-500 mt-3">
+                    {selectedGoals.length} goal{selectedGoals.length === 1 ? '' : 's'} selected.{' '}
+                    <button onClick={() => setSelectedGoals([])} className="underline font-semibold" style={{ color: PURPLE }}>
+                      Clear all
+                    </button>
+                  </p>
+                )}
               </div>
             </div>
 
@@ -526,7 +742,7 @@ p.MsoFooter, li.MsoFooter, div.MsoFooter {
             {!file && <p className="text-xs text-slate-500 text-center mt-2">Select a syllabus file to continue.</p>}
             {loading && (
               <p className="text-xs text-slate-500 text-center mt-2">
-                Full-semester syllabi typically take about a minute.
+                Full-semester syllabi typically take one to two minutes.
               </p>
             )}
           </div>
@@ -562,6 +778,21 @@ p.MsoFooter, li.MsoFooter, div.MsoFooter {
                 {[payload.course.department, payload.course.term, payload.course.instructor].filter(Boolean).join(' | ')}
               </div>
               <p className="text-xs text-slate-600 mt-2 italic">{payload.course_summary}</p>
+
+              {appliedGoals.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {appliedGoals.map((g) => (
+                    <span
+                      key={g}
+                      className="text-[10px] font-semibold px-2 py-1 rounded-full border"
+                      style={{ color: PURPLE, borderColor: PURPLE, backgroundColor: '#f7f4fa' }}
+                    >
+                      {g}
+                    </span>
+                  ))}
+                </div>
+              )}
+
               {extractedNote && (
                 <div className="mt-3 flex items-center gap-3">
                   <span className="text-[11px] text-slate-500">{extractedNote}</span>
@@ -582,6 +813,13 @@ p.MsoFooter, li.MsoFooter, div.MsoFooter {
                 </pre>
               )}
             </div>
+
+            {payload.goals_statement && (
+              <div className="mb-6 p-4 rounded border-l-4 bg-slate-50" style={{ borderColor: GOLD }}>
+                <div className="text-xs font-bold uppercase text-slate-600 mb-1">How your goals shaped this policy</div>
+                <p className="text-xs text-slate-700 leading-relaxed">{payload.goals_statement}</p>
+              </div>
+            )}
 
             <p className="text-sm text-slate-600 mb-6">
               Set a tier for a whole module, or override individual tasks. Module-level changes cascade to every task inside it.
@@ -624,36 +862,91 @@ p.MsoFooter, li.MsoFooter, div.MsoFooter {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {m.tasks.map((t, ti) => (
-                      <tr key={ti} className="bg-white align-top">
-                        <td className="p-3 font-medium text-slate-800">
-                          {t.title}
-                          <div className="text-[10px] text-slate-500 mt-1">{t.rationale}</div>
-                        </td>
-                        <td className="p-3">
-                          <select
-                            value={t.current_tier}
-                            onChange={(e) => initiateTaskChange(mi, ti, e.target.value)}
-                            title={t.current_tier}
-                            className={`w-full p-2 border rounded text-xs font-semibold cursor-pointer ${
-                              t.is_overridden ? 'border-amber-400 bg-amber-50 text-amber-900' : 'border-green-300 bg-green-50 text-green-900'
-                            }`}
-                          >
-                            {TIERS.map((tier) => (
-                              <option key={tier} value={tier}>{TIER_LABELS[tier]}</option>
-                            ))}
-                          </select>
-                          <div className="text-[10px] mt-1">
-                            {t.is_overridden ? (
-                              <span className="text-amber-600 font-bold">● Faculty override logged</span>
-                            ) : (
-                              <span className="text-green-600 font-bold">✓ AI recommended baseline</span>
+                    {m.tasks.map((t, ti) => {
+                      const key = `${mi}-${ti}`;
+                      const prompts = t.suggested_prompts || [];
+                      const risks = t.at_risk_uses || [];
+                      const hasGuidance = prompts.length > 0 || risks.length > 0;
+                      const isOpen = !!openPrompts[key];
+                      return (
+                        <tr key={ti} className="bg-white align-top">
+                          <td className="p-3 font-medium text-slate-800">
+                            {t.title}
+                            <div className="text-[10px] text-slate-500 mt-1">{t.rationale}</div>
+                          </td>
+                          <td className="p-3">
+                            <select
+                              value={t.current_tier}
+                              onChange={(e) => initiateTaskChange(mi, ti, e.target.value)}
+                              title={t.current_tier}
+                              className={`w-full p-2 border rounded text-xs font-semibold cursor-pointer ${
+                                t.is_overridden ? 'border-amber-400 bg-amber-50 text-amber-900' : 'border-green-300 bg-green-50 text-green-900'
+                              }`}
+                            >
+                              {TIERS.map((tier) => (
+                                <option key={tier} value={tier}>{TIER_LABELS[tier]}</option>
+                              ))}
+                            </select>
+                            <div className="text-[10px] mt-1">
+                              {t.is_overridden ? (
+                                <span className="text-amber-600 font-bold">● Faculty override logged</span>
+                              ) : (
+                                <span className="text-green-600 font-bold">✓ AI recommended baseline</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="p-3 text-xs text-slate-600">
+                            {t.acceptable_use}
+                            {hasGuidance && (
+                              <div className="mt-2">
+                                <button
+                                  onClick={() => setOpenPrompts({ ...openPrompts, [key]: !isOpen })}
+                                  className="text-[11px] font-semibold underline"
+                                  style={{ color: PURPLE }}
+                                >
+                                  {isOpen ? 'Hide prompt guidance' : 'Show prompt guidance'}
+                                </button>
+
+                                {isOpen && (
+                                  <div className="mt-2 p-3 rounded border border-slate-200 bg-slate-50">
+                                    {prompts.length > 0 && (
+                                      <>
+                                        <div className="text-[10px] font-bold uppercase text-green-800 mb-1">
+                                          Prompts students may use
+                                        </div>
+                                        <ul className="list-disc ml-4 mb-3 space-y-1">
+                                          {prompts.map((p, pi) => (
+                                            <li key={pi} className="text-[11px] text-slate-700">
+                                              &ldquo;{p.prompt}&rdquo;
+                                              <span className="text-slate-500"> — {p.purpose}</span>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </>
+                                    )}
+                                    {risks.length > 0 && (
+                                      <>
+                                        <div className="text-[10px] font-bold uppercase text-red-800 mb-1">
+                                          Uses that risk a violation
+                                        </div>
+                                        <ul className="list-disc ml-4 space-y-1">
+                                          {risks.map((r, ri) => (
+                                            <li key={ri} className="text-[11px] text-slate-700">
+                                              {r.pattern}
+                                              <span className="text-slate-500"> — {r.why_at_risk}</span>
+                                            </li>
+                                          ))}
+                                        </ul>
+                                      </>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
                             )}
-                          </div>
-                        </td>
-                        <td className="p-3 text-xs text-slate-600">{t.acceptable_use}</td>
-                      </tr>
-                    ))}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
