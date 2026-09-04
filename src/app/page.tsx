@@ -17,6 +17,61 @@ const TIER_LABELS: Record<string, string> = {
   'Tier 4: Permitted with Mandatory Disclosure': 'Tier 4 — Disclosure',
 };
 
+// Tier-correct language used when a faculty member overrides the AI's recommendation.
+// The model wrote its guidance for the ORIGINAL tier, so it must not be shown at a new one.
+const TIER_GUIDANCE: Record
+  string,
+  { acceptable_use: string; prompts: { prompt: string; purpose: string }[]; risks: { pattern: string; why_at_risk: string }[] }
+> = {
+  'Tier 1: Strictly Prohibited': {
+    acceptable_use:
+      'No generative AI use is permitted on this task at any stage — including brainstorming, outlining, drafting, editing, or proofreading. Complete it using course materials and permitted human support such as office hours, a study group, or the writing center.',
+    prompts: [],
+    risks: [
+      {
+        pattern: 'Any use of a generative AI tool on this task, including for ideas, outlines, or proofreading.',
+        why_at_risk: 'This task is authorized at Tier 1, where no AI assistance is permitted.',
+      },
+    ],
+  },
+  'Tier 2: Brainstorming Permitted': {
+    acceptable_use:
+      'You may use AI before you write — to explore angles, test your understanding, or check your reasoning. Everything you submit must be your own composition. Do not use AI to draft, rewrite, or edit submitted work.',
+    prompts: [
+      { prompt: 'What are the strongest objections to the argument I have outlined below?', purpose: 'Pressure-tests your reasoning before you write' },
+      { prompt: 'Explain this concept in plain language, then ask me questions to check my understanding.', purpose: 'Confirms you understand the material' },
+    ],
+    risks: [
+      { pattern: 'Having the tool draft any portion of the text you submit.', why_at_risk: 'Tier 2 permits exploration only; submitted writing must be yours.' },
+      { pattern: 'Pasting in your draft and submitting the rewritten version.', why_at_risk: 'AI editing produces text that is no longer your own composition.' },
+    ],
+  },
+  'Tier 3: Full AI Permitted': {
+    acceptable_use:
+      'You may use AI throughout this task, including for drafting. You remain responsible for everything you submit: verify all facts and sources, and be prepared to explain and defend any part of your work.',
+    prompts: [
+      { prompt: 'Draft an outline for this task, then help me expand the sections I mark.', purpose: 'Speeds up structure so you can focus on substance' },
+      { prompt: 'Review my draft and identify weak reasoning, gaps, or unsupported claims.', purpose: 'Improves quality before you submit' },
+    ],
+    risks: [
+      { pattern: 'Submitting output you have not read, verified, or could not explain if asked.', why_at_risk: 'You are accountable for the accuracy of everything you submit.' },
+      { pattern: 'Citing sources the tool produced without confirming they exist.', why_at_risk: 'AI tools fabricate citations that look authentic.' },
+    ],
+  },
+  'Tier 4: Permitted with Mandatory Disclosure': {
+    acceptable_use:
+      'You may use AI on this task, and you must disclose it. Include a short note with your submission naming the tool, what you used it for, and which parts of the work it touched. Undisclosed use is treated as an integrity violation.',
+    prompts: [
+      { prompt: 'Help me with this task and keep a running list of what you contributed, so I can disclose it.', purpose: 'Makes the required disclosure easy to write' },
+      { prompt: 'Review my draft and flag anything I should verify before I submit it.', purpose: 'Catches errors you remain responsible for' },
+    ],
+    risks: [
+      { pattern: 'Using a tool and leaving it out of your disclosure note.', why_at_risk: 'Tier 4 permits use but requires that it be documented.' },
+      { pattern: 'Describing your use vaguely, such as "used AI for help".', why_at_risk: 'Disclosure must name the tool and what it did.' },
+    ],
+  },
+};
+
 // Optional pedagogical goals. `directive` is what actually reaches the model.
 const GOALS: { id: string; label: string; hint: string; directive: string }[] = [
   {
@@ -299,9 +354,34 @@ export default function SyllabusWizard() {
       .trim();
   };
 
+  // When a tier is overridden, the model's original guidance no longer matches the
+  // authorized tier, so substitute tier-correct language instead of showing stale text.
+  const effectiveGuidance = (t: Task) => {
+    const overridden = t.current_tier !== t.recommended_tier;
+    if (!overridden) {
+      return {
+        acceptable_use: t.acceptable_use,
+        prompts: t.suggested_prompts || [],
+        risks: t.at_risk_uses || [],
+        substituted: false,
+      };
+    }
+    const fb = TIER_GUIDANCE[t.current_tier];
+    if (!fb) {
+      return {
+        acceptable_use: t.acceptable_use,
+        prompts: t.suggested_prompts || [],
+        risks: t.at_risk_uses || [],
+        substituted: false,
+      };
+    }
+    return { acceptable_use: fb.acceptable_use, prompts: fb.prompts, risks: fb.risks, substituted: true };
+  };
+
   const promptBlockHtml = (t: Task) => {
-    const prompts = t.suggested_prompts || [];
-    const risks = t.at_risk_uses || [];
+    const g = effectiveGuidance(t);
+    const prompts = g.prompts;
+    const risks = g.risks;
     if (!prompts.length && !risks.length) return '';
 
     const promptItems = prompts
@@ -368,7 +448,7 @@ export default function SyllabusWizard() {
                 <td style="padding:8px;border:1px solid #ddd;color:${PURPLE};">${t.current_tier}${
                   t.is_overridden ? '<br/><span style="font-size:10px;color:#8a6100;">Faculty override</span>' : ''
                 }</td>
-                <td style="padding:8px;border:1px solid #ddd;">${t.acceptable_use}</td>
+                <td style="padding:8px;border:1px solid #ddd;">${effectiveGuidance(t).acceptable_use}</td>
               </tr>${promptBlockHtml(t)}`
               )
               .join('')}
@@ -864,8 +944,9 @@ p.MsoFooter, li.MsoFooter, div.MsoFooter {
                   <tbody className="divide-y divide-slate-100">
                     {m.tasks.map((t, ti) => {
                       const key = `${mi}-${ti}`;
-                      const prompts = t.suggested_prompts || [];
-                      const risks = t.at_risk_uses || [];
+                      const g = effectiveGuidance(t);
+                      const prompts = g.prompts;
+                      const risks = g.risks;
                       const hasGuidance = prompts.length > 0 || risks.length > 0;
                       const isOpen = !!openPrompts[key];
                       return (
@@ -889,14 +970,14 @@ p.MsoFooter, li.MsoFooter, div.MsoFooter {
                             </select>
                             <div className="text-[10px] mt-1">
                               {t.is_overridden ? (
-                                <span className="text-amber-600 font-bold">● Faculty override logged</span>
+                                <span className="text-amber-600 font-bold">● Faculty override logged — guidance updated</span>
                               ) : (
                                 <span className="text-green-600 font-bold">✓ AI recommended baseline</span>
                               )}
                             </div>
                           </td>
                           <td className="p-3 text-xs text-slate-600">
-                            {t.acceptable_use}
+                            {g.acceptable_use}
                             {hasGuidance && (
                               <div className="mt-2">
                                 <button
