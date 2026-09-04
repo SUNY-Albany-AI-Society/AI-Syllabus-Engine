@@ -19,7 +19,7 @@ const TIER_LABELS: Record<string, string> = {
 
 // Tier-correct language used when a faculty member overrides the AI's recommendation.
 // The model wrote its guidance for the ORIGINAL tier, so it must not be shown at a new one.
-const TIER_GUIDANCE: Record
+const TIER_GUIDANCE: Record<
   string,
   { acceptable_use: string; prompts: { prompt: string; purpose: string }[]; risks: { pattern: string; why_at_risk: string }[] }
 > = {
